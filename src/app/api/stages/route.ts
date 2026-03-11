@@ -9,21 +9,24 @@ const supabase = createClient(
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const student_id = searchParams.get("student_id");
+        const program_id = searchParams.get("program_id");
 
-        if (!student_id) {
-            return NextResponse.json({ message: "Student ID is required" }, { status: 400 });
+        let query = supabase
+            .from("academic_stage_rules")
+            .select("*")
+            .eq("is_visible", true);
+
+        if (program_id) {
+            query = query.eq("program_id", program_id);
         }
 
-        const { data: evaluations, error } = await supabase
-            .from("evaluation_scores")
-            .select("*")
-            .eq("student_id", student_id);
+        const { data, error } = await query.order("semester_number", { ascending: true });
 
         if (error) throw error;
 
-        return NextResponse.json(evaluations, { status: 200 });
+        return NextResponse.json(data, { status: 200 });
     } catch (error: any) {
+        console.error("API Error [/api/stages]:", error);
         return NextResponse.json({ message: "Error", error: error.message }, { status: 500 });
     }
 }

@@ -1,44 +1,56 @@
-import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/dbConnect';
-import NTCCUser from '@/models/NTCCUser';
-import bcrypt from 'bcryptjs';
+import { createClient } from "@supabase/supabase-js";
+import bcrypt from "bcryptjs";
+import { NextResponse } from "next/server";
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(req: Request) {
     try {
-        await dbConnect();
         const { university_id, password } = await req.json();
 
         if (!university_id || !password) {
-            return NextResponse.json({ message: 'Missing credentials' }, { status: 400 });
+            return NextResponse.json({ message: "Missing credentials" }, { status: 400 });
         }
 
-        const user = await NTCCUser.findOne({ university_id });
+        // Find user by university_id with program and batch info
+        const { data: user, error } = await supabase
+            .from("students")
+            .select("*, batches(name, program_id)")
+            .eq("university_id", university_id)
+            .single();
 
-        if (!user) {
-            return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 });
+        if (error || !user) {
+            return NextResponse.json({ message: "Invalid University ID or Password" }, { status: 401 });
         }
 
         const isMatch = await bcrypt.compare(password, user.password_hash);
 
         if (!isMatch) {
-            return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 });
+            return NextResponse.json({ message: "Invalid University ID or Password" }, { status: 401 });
         }
 
-        // In a real app, you'd generate a JWT here. 
-        // For this simple clean implementation, we'll return user info.
+        // Return user info
         return NextResponse.json({
-            message: 'Login successful',
+            message: "Login successful",
             user: {
-                name: user.name,
-                university_id: user.university_id,
+                id: user.id,
+                name: user.full_name,
                 email: user.email,
-                batch: user.batch,
-                department: user.department
+                university_id: user.university_id,
+                enrollment_number: user.enrollment_number,
+                enrollment_year: user.enrollment_year,
+                batch_id: user.batch_id,
+                batch_name: user.batches?.name,
+                program_id: user.batches?.program_id,
+                section: user.section,
+                current_semester: user.current_semester
             }
         }, { status: 200 });
 
-    } catch (error: any) {
-        console.error('Login Error:', error);
-        return NextResponse.json({ message: 'Internal Server Error', error: error.message }, { status: 500 });
+    } catch (err: any) {
+        return NextResponse.json({ message: err.message }, { status: 500 });
     }
 }
